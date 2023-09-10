@@ -19,9 +19,11 @@ if uploaded_image is not None:
     # Display the uploaded image
     st.image(uploaded_image, caption="Uploaded Image", use_column_width=True)
 
-    # Automatically detect radius based on image characteristics
     img = cv2.imread(uploaded_image_path, cv2.IMREAD_GRAYSCALE)
+    
+    st.image(img, caption="equalizeHist", use_column_width=True)
     img = cv2.bitwise_not(img)
+    st.image(img, caption="bitwise_not", use_column_width=True)
     auto_radius = int(5)  # Adjust this factor as needed
 
     # Slider for adjusting radius
