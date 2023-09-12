@@ -20,21 +20,27 @@ if uploaded_image is not None:
     st.image(uploaded_image, caption="Uploaded Image", use_column_width=True)
 
     img = cv2.imread(uploaded_image_path, cv2.IMREAD_GRAYSCALE)
-    
+    st.image(img, caption="IMREAD_GRAYSCALE", use_column_width=True)
+    img = cv2.equalizeHist(img)
     st.image(img, caption="equalizeHist", use_column_width=True)
+    img= cv2.convertScaleAbs(img)
+    st.image(img, caption="convertScaleAbs", use_column_width=True)
     img = cv2.bitwise_not(img)
     st.image(img, caption="bitwise_not", use_column_width=True)
+
     auto_radius = int(5)  # Adjust this factor as needed
 
     # Slider for adjusting radius
     radius_slider = st.slider("Radius", min_value=1, max_value=100, value=auto_radius)
-
+    minDist = st.slider("minDist", min_value=1, max_value=100, value=20)
+    param1 = st.slider("param1", min_value=1, max_value=100, value=50)
+    param2 = st.slider("param2", min_value=1, max_value=100, value=30)
     # Button to find circles
     if True:
         rmin = radius_slider
         rmax = 3 * rmin
 
-        circles = cv2.HoughCircles(img, cv2.HOUGH_GRADIENT, dp=1, minDist=20, param1=50, param2=30, minRadius=rmin, maxRadius=rmax)
+        circles = cv2.HoughCircles(img, cv2.HOUGH_GRADIENT, dp=1, minDist=minDist, param1=param1, param2=param2, minRadius=rmin, maxRadius=rmax)
 
         if circles is not None:
             circles = np.uint16(np.around(circles))
