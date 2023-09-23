@@ -1,81 +1,61 @@
 import streamlit as st
-import numpy as np
-import cv2
-from PIL import Image
 import tempfile
-import datetime
+import cv2
+import numpy as np
+from roboflow import Roboflow
+st.set_page_config(page_title="โปรแกรมนับท่อจากรูปภาพ", page_icon=":chart_with_upwards_trend:")
 
-st.title("PVC Pipe Circle Drawer with Counts (No Center Dot)")
-
+st.title("โปรแกรมนับท่อจากรูปภาพ V.1 (ML Version)")
+rf = Roboflow(api_key="ppkxwCTvMQXUrIOdtAgF")
+project = rf.workspace().project("circle-detector")
+model = project.version(1).model
 uploaded_image = st.file_uploader("Upload an image", type=["jpg", "png", "jpeg"])
+st.markdown("*หากนับท่อได้เยอะเกินจริง ให้เพิ่มค่า confidence*")
+confidence=st.slider("confidence", min_value=1, max_value=100, value=40)
+with st.spinner('กำลังประมวลผล . . . .'):
+    if uploaded_image is not None:
+        # Save the uploaded image to a temporary file
+        with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
+            tmp_file.write(uploaded_image.read())
 
-if uploaded_image is not None:
-    # Save the uploaded image to a temporary file
-    with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
-        tmp_file.write(uploaded_image.read())
-
-    uploaded_image_path = tmp_file.name
-
-    # Display the uploaded image
-    st.image(uploaded_image, caption="Uploaded Image", use_column_width=True)
-
-    img = cv2.imread(uploaded_image_path, cv2.IMREAD_GRAYSCALE)
-    st.image(img, caption="IMREAD_GRAYSCALE", use_column_width=True)
-    img = cv2.equalizeHist(img)
-    st.image(img, caption="equalizeHist", use_column_width=True)
-    img= cv2.convertScaleAbs(img)
-    st.image(img, caption="convertScaleAbs", use_column_width=True)
-    img = cv2.bitwise_not(img)
-    st.image(img, caption="bitwise_not", use_column_width=True)
-
-    auto_radius = int(5)  # Adjust this factor as needed
-
-    # Slider for adjusting radius
-    radius_slider = st.slider("Radius", min_value=1, max_value=100, value=auto_radius)
-    minDist = st.slider("minDist", min_value=1, max_value=100, value=20)
-    param1 = st.slider("param1", min_value=1, max_value=100, value=50)
-    param2 = st.slider("param2", min_value=1, max_value=100, value=30)
-    # Button to find circles
-    if True:
-        rmin = radius_slider
-        rmax = 3 * rmin
-
-        circles = cv2.HoughCircles(img, cv2.HOUGH_GRADIENT, dp=1, minDist=minDist, param1=param1, param2=param2, minRadius=rmin, maxRadius=rmax)
-
-        if circles is not None:
-            circles = np.uint16(np.around(circles))
-            num_circles = len(circles[0, :])
-            st.write(f"Number of Circles: {num_circles}")
-
-            # Create an image with a transparent white background
-            img_with_circles = cv2.imread(uploaded_image_path)
-            overlay = img_with_circles.copy()
-            alpha = 0.5  # Transparency level
-
-            for idx, circle in enumerate(circles[0, :], start=1):
-                x, y, r = circle
-
-                # Draw a red border around the circle
-                cv2.circle(overlay, (x, y), r, (255, 0, 0), 2)
-
-                # Draw a white filled circle (transparent)
-                cv2.circle(overlay, (x, y), r - 2, (255, 255, 255), -1)
-
-                # Add the circle number at the center with reduced font size
-                font_scale = 0.5
-                font_thickness = 1
-                text_size, _ = cv2.getTextSize(str(idx), cv2.FONT_HERSHEY_SIMPLEX, font_scale, font_thickness)
-                text_x = x - text_size[0] // 2
-                text_y = y + text_size[1] // 2
-                cv2.putText(overlay, str(idx), (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 0, 0), font_thickness)
-
-            # Combine the overlay with the original image
-            img_with_circles = cv2.addWeighted(overlay, alpha, img_with_circles, 1 - alpha, 0)
-            # Add text for the total number of circles and date/time with a gray background
-            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            text = f"Total Circles: {num_circles} | Timestamp: {timestamp}"
-            cv2.putText(img_with_circles, text, (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
-            # Display the image with circles and numbers
-            st.image(img_with_circles, caption="Image with Circles", use_column_width=True)
-        else:
-            st.info("No circles found.")
+        uploaded_image_path = tmp_file.name
+        image = cv2.imread(uploaded_image_path, cv2.IMREAD_COLOR)
+        # Convert BGR to RGB format
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        # Display the uploaded image
+        detections = model.predict(uploaded_image_path, confidence=confidence, overlap=30,stroke=1, labels=False)
+        # Initialize the count for each class (e.g., "Pipe")
+        class_counts = {}
+        
+        for detection in detections:
+            class_name = detection["class"]
+            if class_name not in class_counts:
+                class_counts[class_name] = 1
+            else:
+                class_counts[class_name] += 1
+            
+            # Get the coordinates for centering the count text
+            x_center = int(detection["x"])
+            y_center = int(detection["y"])
+            
+            # Determine the font scale based on the object's size
+            font_scale = min(detection["width"], detection["height"]) / 80.0
+            
+            # Calculate the size of the count text
+            text_size, _ = cv2.getTextSize(str(class_counts[class_name]), cv2.FONT_HERSHEY_SIMPLEX, font_scale, 2)
+            
+            # Calculate the position for centering the text
+            text_x = x_center - text_size[0] // 2
+            text_y = y_center + text_size[1] // 2
+            
+            # Draw the count on the image with adjusted centering
+            # Draw the white-stroked black text
+            cv2.putText(image, str(class_counts[class_name]), (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (255, 255, 255), 10, cv2.LINE_AA)
+            cv2.putText(image, str(class_counts[class_name]), (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 0, 0), 1, cv2.LINE_AA)    
+        # Display the number of detected pipes and the image with counts
+        if "Pipe" in class_counts:
+            st.info(f"เจอท่อทั้งหมดในภาพ: {class_counts['Pipe']} ท่อน", icon="ℹ️")
+        
+        st.image(image, caption="", use_column_width=True)
+    # Footer content
+st.markdown("NPI Digital Infrastructure")
